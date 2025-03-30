@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BlockFlags","ChildMapEntry","SourceData"],"fn":["copy_metadata","file_xattrs"],"struct":["IntermediateNode","Source","SourceFile","TreeIterator","TreeProcessor","Writer"]};

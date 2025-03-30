@@ -1,0 +1,12 @@
+/home/cyrex/Projects/libappimage/target/debug/deps/libxattr-43c994e2cc647236.rmeta: /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/lib.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/error.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/sys/mod.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/util.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/sys/linux_macos/mod.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/sys/linux_macos/linux.rs
+
+/home/cyrex/Projects/libappimage/target/debug/deps/libxattr-43c994e2cc647236.rlib: /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/lib.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/error.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/sys/mod.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/util.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/sys/linux_macos/mod.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/sys/linux_macos/linux.rs
+
+/home/cyrex/Projects/libappimage/target/debug/deps/xattr-43c994e2cc647236.d: /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/lib.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/error.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/sys/mod.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/util.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/sys/linux_macos/mod.rs /home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/sys/linux_macos/linux.rs
+
+/home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/lib.rs:
+/home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/error.rs:
+/home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/sys/mod.rs:
+/home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/util.rs:
+/home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/sys/linux_macos/mod.rs:
+/home/cyrex/.cargo/registry/src/index.crates.io-6f17d22bba15001f/xattr-0.2.3/src/sys/linux_macos/linux.rs:

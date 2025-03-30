@@ -18,19 +18,49 @@ https://docs.appimage.org/api/libappimage/. Please note that if you are using li
 
 ## Building
 
-If for some reason you need to do a local development build, on a deb-based system (tested on Ubuntu xenial) do:
+To build the static library:
 
+```bash
+cargo build --release
 ```
-sudo apt-get -y install automake cmake libtool libcairo-dev libfuse-dev git librsvg2-dev
-git clone https://github.com/AppImage/libappimage --recursive
-cd ./libappimage/
-mkdir build
-cd build
-cmake .. -DBUILD_TESTING:bool=False
-make
-sudo make install
-cd ..
+
+This will generate a static library file in `target/release/`:
+- On Linux: `libappimage.a`
+- On macOS: `libappimage.a`
+- On Windows: `appimage.lib`
+
+## Usage in C/C++
+
+To use this library in a C/C++ project:
+
+1. Include the header file (to be generated)
+2. Link against the static library
+3. Call the exported functions
+
+Example:
+
+```c
+#include <appimage.h>
+
+int main() {
+    appimage_init();
+    const char* version = appimage_version();
+    printf("AppImage version: %s\n", version);
+    return 0;
+}
 ```
+
+## Development
+
+To run tests:
+
+```bash
+cargo test
+```
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Contributing
 

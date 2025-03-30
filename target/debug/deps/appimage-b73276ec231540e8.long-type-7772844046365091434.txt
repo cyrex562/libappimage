@@ -1,0 +1,1 @@
+std::result::Result<Box<(dyn traversal::Traversal + 'static)>, error::AppImageError>

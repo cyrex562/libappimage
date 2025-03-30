@@ -1,0 +1,1 @@
+Box<(dyn for<'a, 'b, 'c> FnMut(&'a str, &'b [u8], &'c mut (dyn Any + 'static)) -> std::result::Result<(), error::AppImageError> + 'static)>

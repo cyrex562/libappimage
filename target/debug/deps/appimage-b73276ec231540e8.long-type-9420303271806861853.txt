@@ -1,0 +1,1 @@
+std::result::Result<manager::IntegrationManager, desktop_integration::error::DesktopIntegrationError>

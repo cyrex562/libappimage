@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Data","XattrType"],"fn":["dumb_canonicalize","enoent_ok"],"struct":["Archive","DataReader","Dir","File","Leased","Node","OwnedDir","OwnedFile"]};

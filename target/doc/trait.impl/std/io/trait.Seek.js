@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"squashfs_ng":[["impl&lt;'a&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.80.1/std/io/trait.Seek.html\" title=\"trait std::io::Seek\">Seek</a> for <a class=\"struct\" href=\"squashfs_ng/read/struct.File.html\" title=\"struct squashfs_ng::read::File\">File</a>&lt;'a&gt;"],["impl&lt;'a&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.80.1/std/io/trait.Seek.html\" title=\"trait std::io::Seek\">Seek</a> for <a class=\"struct\" href=\"squashfs_ng/read/struct.OwnedFile.html\" title=\"struct squashfs_ng::read::OwnedFile\">OwnedFile</a>&lt;'a&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
