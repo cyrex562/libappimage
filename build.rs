@@ -12,6 +12,8 @@ fn main() {
     let bindings = bindgen::Builder::default()
         .header("include/appimage.h")
         .generate_comments(true)
+        .clang_arg("-I/usr/include")
+        .clang_arg("-I/usr/lib/gcc/x86_64-linux-gnu/14/include")
         .generate()
         .expect("Unable to generate bindings");
 
@@ -21,15 +23,13 @@ fn main() {
         .expect("Couldn't write bindings!");
 
     // Copy header file to output directory
-    std::fs::copy(
-        "include/appimage.h",
-        out_path.join("appimage.h"),
-    ).expect("Failed to copy header file");
+    std::fs::copy("include/appimage.h", out_path.join("appimage.h"))
+        .expect("Failed to copy header file");
 
     // Build C example
     let cc = cc::Build::new();
     let compiler = cc.get_compiler();
-    
+
     Command::new(compiler.path())
         .args(&[
             "-o",
@@ -49,4 +49,4 @@ fn main() {
     println!("cargo:rustc-link-lib=dylib=squashfuse");
     println!("cargo:rustc-link-lib=dylib=archive");
     println!("cargo:rustc-link-lib=dylib=elf");
-} 
+}

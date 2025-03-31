@@ -7,6 +7,13 @@ description = "A static library for AppImage handling"
 license = "MIT"
 build = "build.rs"
 
+[features]
+default = ["desktop-integration", "thumbnailer", "trace"]
+desktop-integration = []
+thumbnailer = []
+use_atomic_exchange = []
+trace = []
+
 [lib]
 name = "appimage"
 crate-type = ["cdylib", "rlib"]
@@ -30,6 +37,11 @@ flate2 = "1.1.0"
 endian = "0.1.3"
 atty = "0.2"
 term_size = "0.3"
+num_cpus = "1.16"
+lzma-sys = "0.1"
+zstd = "0.13"
+base64 = "0.21"
+xattr = "1.0"
 
 [build-dependencies]
 pkg-config = "0.3"
@@ -38,4 +50,4 @@ cc = "1.0"
 
 [dev-dependencies]
 tempfile = "3.8"
-test-case = "3.3" 
+test-case = "3.3"

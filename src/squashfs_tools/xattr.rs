@@ -1,17 +1,40 @@
-use std::path::Path;
-use std::ffi::CString;
-use std::os::unix::fs::MetadataExt;
+use crate::alloc::{safe_free, safe_malloc};
 use crate::error::{ErrorState, SquashError};
-use std::collections::HashMap;
 use crate::fs::{SquashfsSuperBlock, SquashfsXattrEntry};
-use crate::alloc::{safe_malloc, safe_free};
 use crate::read::read_block;
-use std::ffi::{CString, CStr};
-use regex::Regex;
 use crate::squashfs_tools::error::{Error, Result};
-use crate::squashfs_tools::squashfs_fs::{SquashfsXattrTable, SquashfsXattrId};
-use crate::squashfs_tools::squashfs_swap::{swap_xattr_table, swap_xattr_id};
-use crate::squashfs_tools::unsquashfs_error::{error, error_start, error_exit};
+use crate::squashfs_tools::squashfs_fs::{SquashfsXattrId, SquashfsXattrTable};
+use crate::squashfs_tools::squashfs_swap::{swap_xattr_id, swap_xattr_table};
+use crate::squashfs_tools::unsquashfs_error::{error, error_exit, error_start};
+use regex::Regex;
+use std::collections::HashMap;
+use std::ffi::{CStr, CString};
+use std::os::unix::fs::MetadataExt;
+use std::path::Path;
+
+/// Constants for extended attributes
+pub const XATTR_VALUE_OOL: i32 = 0x100;
+pub const XATTR_PREFIX_MASK: i32 = 0xff;
+pub const XATTR_VALUE_OOL_SIZE: usize = std::mem::size_of::<i64>();
+pub const XATTR_INLINE_MAX: usize = 128;
+pub const XATTR_TARGET_MAX: usize = 65536;
+
+/// Constants for prefix types
+pub const PREFIX_BASE64_0S: u16 = 0x3000 + 0x53;
+pub const PREFIX_BASE64_0s: u16 = 0x3000 + 0x73;
+pub const PREFIX_BINARY_0B: u16 = 0x3000 + 0x42;
+pub const PREFIX_BINARY_0b: u16 = 0x3000 + 0x62;
+pub const PREFIX_HEX_0X: u16 = 0x3000 + 0x58;
+pub const PREFIX_HEX_0x: u16 = 0x3000 + 0x78;
+pub const PREFIX_TEXT_0T: u16 = 0x3000 + 0x54;
+pub const PREFIX_TEXT_0t: u16 = 0x3000 + 0x74;
+
+/// SquashFS specific constants
+const SQUASHFS_METADATA_SIZE: usize = 8192;
+const SQUASHFS_XATTR_USER: u8 = 0;
+const SQUASHFS_XATTR_TRUSTED: u8 = 1;
+const SQUASHFS_XATTR_SECURITY: u8 = 2;
+const SQUASHFS_XATTR_VALUE_OOL: u8 = 0x80;
 
 /// Structure representing an extended attribute
 #[derive(Debug, Clone)]
@@ -23,18 +46,54 @@ pub struct Xattr {
 }
 
 /// Structure representing a list of extended attributes
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
 pub struct XattrList {
+    /// Name of the extended attribute
+    pub name: String,
+    /// Full name of the extended attribute
+    pub full_name: String,
+    /// Size of the extended attribute
+    pub size: usize,
+    /// Virtual size of the extended attribute
+    pub vsize: usize,
+    /// Value of the extended attribute
+    pub value: Vec<u8>,
+    /// Type of the extended attribute
+    pub type_: i32,
+    /// Out-of-line value
+    pub ool_value: i64,
+    /// Virtual checksum
+    pub vchecksum: u16,
+    /// Next extended attribute in the list
+    pub vnext: Option<Box<XattrList>>,
     /// List of extended attributes
     pub attrs: Vec<Xattr>,
 }
 
 impl XattrList {
     /// Create a new empty xattr list
-    pub fn new() -> Self {
-        Self {
+    pub fn new(name: &str) -> Result<Self> {
+        let type_ = xattr_get_type(name);
+        let (full_name, name, size) = if type_ != -1 {
+            let prefix = &prefix_table[type_ as usize];
+            let name = &name[prefix.prefix.len()..];
+            (name.to_string(), name.to_string(), name.len())
+        } else {
+            (name.to_string(), name.to_string(), name.len())
+        };
+
+        Ok(Self {
+            name,
+            full_name,
+            size,
+            vsize: 0,
+            value: Vec::new(),
+            type_,
+            ool_value: -1,
+            vchecksum: 0,
+            vnext: None,
             attrs: Vec::new(),
-        }
+        })
     }
 
     /// Add an extended attribute to the list
@@ -43,24 +102,52 @@ impl XattrList {
     }
 }
 
+/// Structure representing a prefix for extended attributes
+#[derive(Debug, Clone)]
+pub struct Prefix {
+    /// Prefix string
+    pub prefix: &'static str,
+    /// Type of the prefix
+    pub type_: i32,
+}
+
+const PREFIX_TABLE: &[Prefix] = &[
+    Prefix {
+        prefix: "user.",
+        type_: SQUASHFS_XATTR_USER as i32,
+    },
+    Prefix {
+        prefix: "trusted.",
+        type_: SQUASHFS_XATTR_TRUSTED as i32,
+    },
+    Prefix {
+        prefix: "security.",
+        type_: SQUASHFS_XATTR_SECURITY as i32,
+    },
+    Prefix {
+        prefix: "",
+        type_: -1,
+    },
+];
+
 /// Read extended attributes from a file in the system
-/// 
+///
 /// This function reads all extended attributes from a file and returns them in a list.
 /// The function is only available if extended attributes are supported by the system.
-/// 
+///
 /// # Arguments
 /// * `filename` - Path to the file to read xattrs from
-/// 
+///
 /// # Returns
 /// * `Result<XattrList, SquashError>` - List of extended attributes or error
 #[cfg(target_os = "linux")]
 pub fn read_xattrs_from_system(filename: &Path) -> Result<XattrList, SquashError> {
+    use libc::{c_char, c_int, c_ulong, c_void, size_t};
     use std::fs::File;
     use std::io::Read;
     use std::os::unix::fs::OpenOptionsExt;
-    use libc::{c_char, c_int, c_ulong, c_void, size_t};
 
-    let mut xattrs = XattrList::new();
+    let mut xattrs = XattrList::new(filename.file_name().unwrap().to_str().unwrap())?;
     let mut error_state = ErrorState::default();
 
     // Open file with O_RDONLY flag
@@ -82,7 +169,10 @@ pub fn read_xattrs_from_system(filename: &Path) -> Result<XattrList, SquashError
             0,
         );
         if ret < 0 {
-            return Err(SquashError::Other(format!("Failed to get xattr list size: {}", std::io::Error::last_os_error())));
+            return Err(SquashError::Other(format!(
+                "Failed to get xattr list size: {}",
+                std::io::Error::last_os_error()
+            )));
         }
         size = ret as size_t;
     }
@@ -105,7 +195,10 @@ pub fn read_xattrs_from_system(filename: &Path) -> Result<XattrList, SquashError
     }
 
     if ret < 0 {
-        return Err(SquashError::Other(format!("Failed to list xattrs: {}", std::io::Error::last_os_error())));
+        return Err(SquashError::Other(format!(
+            "Failed to list xattrs: {}",
+            std::io::Error::last_os_error()
+        )));
     }
 
     // Process each xattr name
@@ -116,9 +209,9 @@ pub fn read_xattrs_from_system(filename: &Path) -> Result<XattrList, SquashError
             CString::from_raw(name_ptr as *mut c_char)
         };
 
-        let name_str = name.to_str().map_err(|e| {
-            SquashError::Other(format!("Invalid xattr name encoding: {}", e))
-        })?;
+        let name_str = name
+            .to_str()
+            .map_err(|e| SquashError::Other(format!("Invalid xattr name encoding: {}", e)))?;
 
         // Get value size
         let mut value_size: size_t = 0;
@@ -130,7 +223,10 @@ pub fn read_xattrs_from_system(filename: &Path) -> Result<XattrList, SquashError
                 0,
             );
             if ret < 0 {
-                return Err(SquashError::Other(format!("Failed to get xattr value size: {}", std::io::Error::last_os_error())));
+                return Err(SquashError::Other(format!(
+                    "Failed to get xattr value size: {}",
+                    std::io::Error::last_os_error()
+                )));
             }
             value_size = ret as size_t;
         }
@@ -150,7 +246,10 @@ pub fn read_xattrs_from_system(filename: &Path) -> Result<XattrList, SquashError
             }
 
             if ret < 0 {
-                return Err(SquashError::Other(format!("Failed to get xattr value: {}", std::io::Error::last_os_error())));
+                return Err(SquashError::Other(format!(
+                    "Failed to get xattr value: {}",
+                    std::io::Error::last_os_error()
+                )));
             }
 
             xattrs.add(name_str.to_string(), value);
@@ -165,7 +264,7 @@ pub fn read_xattrs_from_system(filename: &Path) -> Result<XattrList, SquashError
 /// Stub implementation for systems without xattr support
 #[cfg(not(target_os = "linux"))]
 pub fn read_xattrs_from_system(_filename: &Path) -> Result<XattrList, SquashError> {
-    Ok(XattrList::new())
+    Ok(XattrList::new("").unwrap())
 }
 
 #[cfg(test)]
@@ -177,7 +276,7 @@ mod tests {
 
     #[test]
     fn test_xattr_list() {
-        let mut list = XattrList::new();
+        let mut list = XattrList::new("test").unwrap();
         assert!(list.attrs.is_empty());
 
         list.add("test.name".to_string(), vec![1, 2, 3]);
@@ -193,19 +292,12 @@ mod tests {
 
         let result = read_xattrs_from_system(file.path());
         assert!(result.is_ok());
-        
+
         let xattrs = result.unwrap();
         // Note: Actual xattr presence depends on system and file permissions
         // We just verify the function doesn't crash
     }
 }
-
-const SQUASHFS_METADATA_SIZE: usize = 8192;
-const SQUASHFS_XATTR_USER: u8 = 0;
-const SQUASHFS_XATTR_TRUSTED: u8 = 1;
-const SQUASHFS_XATTR_SECURITY: u8 = 2;
-const XATTR_PREFIX_MASK: u8 = 0x0F;
-const SQUASHFS_XATTR_VALUE_OOL: u8 = 0x80;
 
 #[derive(Debug)]
 pub struct XattrTable {
@@ -222,19 +314,6 @@ struct SquashfsXattrId {
     xattr: u64,
     count: u32,
 }
-
-#[derive(Debug)]
-struct Prefix {
-    prefix: &'static str,
-    type_: i32,
-}
-
-const PREFIX_TABLE: &[Prefix] = &[
-    Prefix { prefix: "user.", type_: SQUASHFS_XATTR_USER as i32 },
-    Prefix { prefix: "trusted.", type_: SQUASHFS_XATTR_TRUSTED as i32 },
-    Prefix { prefix: "security.", type_: SQUASHFS_XATTR_SECURITY as i32 },
-    Prefix { prefix: "", type_: -1 },
-];
 
 impl XattrTable {
     pub fn new() -> Self {
@@ -258,7 +337,8 @@ impl XattrTable {
 
     fn read_xattr_entry(&self, entry: &SquashfsXattrEntry, name: &[u8]) -> Result<XattrList> {
         let type_ = entry.type_ & XATTR_PREFIX_MASK;
-        let prefix = PREFIX_TABLE.iter()
+        let prefix = PREFIX_TABLE
+            .iter()
             .find(|p| p.type_ == type_ as i32)
             .ok_or_else(|| SquashError::InvalidXattrs)?;
 
@@ -272,6 +352,10 @@ impl XattrTable {
             size: entry.size as usize,
             vsize: 0, // Will be filled in later
             type_: entry.type_,
+            ool_value: -1,
+            vchecksum: 0,
+            vnext: None,
+            attrs: Vec::new(),
         })
     }
 
@@ -286,9 +370,8 @@ impl XattrTable {
         reader.seek(std::io::SeekFrom::Start(s_blk.xattr_id_table_start as u64))?;
         reader.read_exact(&mut id_table)?;
 
-        let id_table = unsafe {
-            std::ptr::read_unaligned(id_table.as_ptr() as *const SquashfsXattrTable)
-        };
+        let id_table =
+            unsafe { std::ptr::read_unaligned(id_table.as_ptr() as *const SquashfsXattrTable) };
 
         let ids = id_table.xattr_ids;
         if ids == 0 {
@@ -299,7 +382,11 @@ impl XattrTable {
         let index_bytes = (ids as usize * 16 + 8191) & !8191;
         let indexes = (ids as usize * 16 + 8191) / 8192;
 
-        if index_bytes != (s_blk.bytes_used - (s_blk.xattr_id_table_start + std::mem::size_of::<SquashfsXattrTable>())) as usize {
+        if index_bytes
+            != (s_blk.bytes_used
+                - (s_blk.xattr_id_table_start + std::mem::size_of::<SquashfsXattrTable>()))
+                as usize
+        {
             return Err(SquashError::InvalidXattrs);
         }
 
@@ -313,18 +400,26 @@ impl XattrTable {
 
         // Read the index table
         let mut index = vec![0i64; indexes];
-        reader.seek(std::io::SeekFrom::Start((s_blk.xattr_id_table_start + std::mem::size_of::<SquashfsXattrTable>()) as u64))?;
-        reader.read_exact(unsafe { std::slice::from_raw_parts_mut(index.as_mut_ptr() as *mut u8, index_bytes) })?;
+        reader.seek(std::io::SeekFrom::Start(
+            (s_blk.xattr_id_table_start + std::mem::size_of::<SquashfsXattrTable>()) as u64,
+        ))?;
+        reader.read_exact(unsafe {
+            std::slice::from_raw_parts_mut(index.as_mut_ptr() as *mut u8, index_bytes)
+        })?;
 
         // Read and decompress the xattr id table
         let bytes = (ids as usize * 16 + 8191) & !8191;
         self.xattr_ids = vec![SquashfsXattrId { xattr: 0, count: 0 }; ids as usize];
 
         for i in 0..indexes {
-            let expected = if (i + 1) != indexes { SQUASHFS_METADATA_SIZE } else { bytes & (SQUASHFS_METADATA_SIZE - 1) };
+            let expected = if (i + 1) != indexes {
+                SQUASHFS_METADATA_SIZE
+            } else {
+                bytes & (SQUASHFS_METADATA_SIZE - 1)
+            };
             let offset = i * SQUASHFS_METADATA_SIZE;
             let mut block = vec![0u8; expected];
-            
+
             if read_block(reader, index[i], None, Some(expected), &mut block)? == 0 {
                 return Err(SquashError::InvalidXattrs);
             }
@@ -332,7 +427,9 @@ impl XattrTable {
             unsafe {
                 std::ptr::copy_nonoverlapping(
                     block.as_ptr(),
-                    self.xattr_ids.as_mut_ptr().add(i * SQUASHFS_METADATA_SIZE / 16) as *mut u8,
+                    self.xattr_ids
+                        .as_mut_ptr()
+                        .add(i * SQUASHFS_METADATA_SIZE / 16) as *mut u8,
                     expected,
                 );
             }
@@ -349,7 +446,7 @@ impl XattrTable {
 
             let mut block = vec![0u8; SQUASHFS_METADATA_SIZE];
             let length = read_block(reader, start, Some(&mut start), None, &mut block)?;
-            
+
             if length == 0 {
                 return Err(SquashError::InvalidXattrs);
             }
@@ -373,7 +470,12 @@ impl XattrTable {
         Ok(ids)
     }
 
-    pub fn get_xattr(&self, i: usize, count: &mut u32, failed: &mut bool) -> Result<Vec<XattrList>> {
+    pub fn get_xattr(
+        &self,
+        i: usize,
+        count: &mut u32,
+        failed: &mut bool,
+    ) -> Result<Vec<XattrList>> {
         if i >= self.xattr_ids.len() {
             return Err(SquashError::InvalidXattrs);
         }
@@ -387,9 +489,10 @@ impl XattrTable {
 
         *failed = false;
         let mut xattr_list = Vec::new();
-        let mut xptr_offset = self.get_xattr_block(xattr_id.xattr as i64)
+        let mut xptr_offset = self
+            .get_xattr_block(xattr_id.xattr as i64)
             .ok_or_else(|| SquashError::InvalidXattrs)?;
-        
+
         xptr_offset += (xattr_id.xattr & 0xFFFF) as i64;
         if xptr_offset as usize + (xattr_id.xattr >> 16) as usize > self.xattr_table_length {
             return Err(SquashError::InvalidXattrs);
@@ -403,12 +506,11 @@ impl XattrTable {
                 return Err(SquashError::InvalidXattrs);
             }
 
-            let entry = unsafe {
-                std::ptr::read_unaligned(xptr.as_ptr() as *const SquashfsXattrEntry)
-            };
+            let entry =
+                unsafe { std::ptr::read_unaligned(xptr.as_ptr() as *const SquashfsXattrEntry) };
 
             xptr = &xptr[std::mem::size_of::<SquashfsXattrEntry>()..];
-            
+
             if xptr.len() < entry.size as usize {
                 return Err(SquashError::InvalidXattrs);
             }
@@ -420,9 +522,7 @@ impl XattrTable {
                 return Err(SquashError::InvalidXattrs);
             }
 
-            let val = unsafe {
-                std::ptr::read_unaligned(xptr.as_ptr() as *const SquashfsXattrVal)
-            };
+            let val = unsafe { std::ptr::read_unaligned(xptr.as_ptr() as *const SquashfsXattrVal) };
 
             xptr = &xptr[std::mem::size_of::<SquashfsXattrVal>()..];
 
@@ -431,23 +531,24 @@ impl XattrTable {
                     return Err(SquashError::InvalidXattrs);
                 }
 
-                let xattr = unsafe {
-                    std::ptr::read_unaligned(xptr.as_ptr() as *const i64)
-                };
+                let xattr = unsafe { std::ptr::read_unaligned(xptr.as_ptr() as *const i64) };
 
                 xptr = &xptr[std::mem::size_of::<i64>()..];
 
                 let start = (xattr >> 16) as i64 + self.xattr_table_start;
                 let offset = (xattr & 0xFFFF) as i64;
-                let ool_xptr_offset = self.get_xattr_block(start)
+                let ool_xptr_offset = self
+                    .get_xattr_block(start)
                     .ok_or_else(|| SquashError::InvalidXattrs)?;
-                
+
                 let ool_xptr = &self.xattrs[ool_xptr_offset as usize + offset as usize..];
                 let ool_val = unsafe {
                     std::ptr::read_unaligned(ool_xptr.as_ptr() as *const SquashfsXattrVal)
                 };
 
-                xattr.value = ool_xptr[std::mem::size_of::<SquashfsXattrVal>()..][..ool_val.vsize as usize].to_vec();
+                xattr.value = ool_xptr[std::mem::size_of::<SquashfsXattrVal>()..]
+                    [..ool_val.vsize as usize]
+                    .to_vec();
             } else {
                 if xptr.len() < val.vsize as usize {
                     return Err(SquashError::InvalidXattrs);
@@ -497,69 +598,6 @@ mod tests {
         table.save_xattr_block(100, 200).unwrap();
         assert_eq!(table.get_xattr_block(100), Some(200));
         assert_eq!(table.get_xattr_block(101), None);
-    }
-}
-
-/// Constants for xattr handling
-pub const XATTR_VALUE_OOL: i32 = 0x100;
-pub const XATTR_PREFIX_MASK: i32 = 0xff;
-pub const XATTR_VALUE_OOL_SIZE: usize = std::mem::size_of::<i64>();
-pub const XATTR_INLINE_MAX: usize = 128;
-pub const XATTR_TARGET_MAX: usize = 65536;
-
-/// Format prefixes for xattr values
-pub const PREFIX_BASE64_0S: u16 = 0x3000 + 0x53;
-pub const PREFIX_BASE64_0s: u16 = 0x3000 + 0x73;
-pub const PREFIX_BINARY_0B: u16 = 0x3000 + 0x42;
-pub const PREFIX_BINARY_0b: u16 = 0x3000 + 0x62;
-pub const PREFIX_HEX_0X: u16 = 0x3000 + 0x58;
-pub const PREFIX_HEX_0x: u16 = 0x3000 + 0x78;
-pub const PREFIX_TEXT_0T: u16 = 0x3000 + 0x54;
-pub const PREFIX_TEXT_0t: u16 = 0x3000 + 0x74;
-
-/// Structure for xattr prefix information
-#[derive(Debug, Clone)]
-pub struct Prefix {
-    pub prefix: &'static str,
-    pub type_: i32,
-}
-
-/// Structure for xattr list entries
-#[derive(Debug, Clone)]
-pub struct XattrList {
-    pub name: String,
-    pub full_name: String,
-    pub size: usize,
-    pub vsize: usize,
-    pub value: Vec<u8>,
-    pub type_: i32,
-    pub ool_value: i64,
-    pub vchecksum: u16,
-    pub vnext: Option<Box<XattrList>>,
-}
-
-impl XattrList {
-    pub fn new(name: &str) -> Result<Self> {
-        let type_ = xattr_get_type(name);
-        let (full_name, name, size) = if type_ != -1 {
-            let prefix = &prefix_table[type_ as usize];
-            let name = &name[prefix.prefix.len()..];
-            (name.to_string(), name.to_string(), name.len())
-        } else {
-            (name.to_string(), name.to_string(), name.len())
-        };
-
-        Ok(Self {
-            name,
-            full_name,
-            size,
-            vsize: 0,
-            value: Vec::new(),
-            type_,
-            ool_value: -1,
-            vchecksum: 0,
-            vnext: None,
-        })
     }
 }
 
@@ -902,4 +940,4 @@ mod tests {
         xattrs_add(&mut state, "user.test=value").unwrap();
         assert_eq!(add_xattrs(&state), 1);
     }
-} 
+}
