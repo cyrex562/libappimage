@@ -1,6 +1,6 @@
 use std::path::Path;
+use std::fmt;
 use crate::error::AppImageResult;
-use crate::desktop_integration::error::DesktopEntryEditError;
 use crate::utils::StringSanitizer;
 use crate::desktop_integration::desktop_entry::{DesktopEntry, DesktopEntryExecValue, DesktopEntryStringsValue};
 
@@ -50,7 +50,7 @@ impl DesktopEntryEditor {
     /// Edit the desktop entry according to the set parameters
     pub fn edit(&self, entry: &mut DesktopEntry) -> AppImageResult<()> {
         if !entry.exists("Desktop Entry/Exec") {
-            return Err(DesktopEntryEditError::Validation("Missing Desktop Entry".to_string()).into());
+            return Err(crate::ffi::ErrorCode::Validation("Missing Desktop Entry".to_string()).into());
         }
 
         self.set_exec_paths(entry)?;
@@ -88,7 +88,7 @@ impl DesktopEntryEditor {
     /// Set Icon entries in the Desktop Entry and Desktop Action groups
     fn set_icons(&self, entry: &mut DesktopEntry) -> AppImageResult<()> {
         if self.identifier.is_empty() {
-            return Err(DesktopEntryEditError::Validation("Missing AppImage UUID".to_string()).into());
+            return Err(crate::ffi::ErrorCode::Validation("Missing AppImage UUID".to_string()).into());
         }
 
         // Get all icon paths first
