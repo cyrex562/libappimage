@@ -1,6 +1,6 @@
-use std::mem;
-use super::error::SquashError;
+use crate::error::SquashError;
 use std::convert::TryFrom;
+use std::mem;
 
 // Constants
 pub const SQUASHFS_CACHED_FRAGMENTS: usize = 8; // CONFIG_SQUASHFS_FRAGMENT_CACHE_SIZE
@@ -9,27 +9,24 @@ pub const SQUASHFS_MINOR: u16 = 0;
 pub const SQUASHFS_MAGIC: u32 = 0x73717368;
 pub const SQUASHFS_MAGIC_SWAP: u32 = 0x68737173;
 pub const SQUASHFS_START: u32 = 0;
-
-// Metadata and block size constants
 pub const SQUASHFS_METADATA_SIZE: usize = 8192;
 pub const SQUASHFS_METADATA_LOG: u32 = 13;
 pub const SQUASHFS_FILE_SIZE: usize = 131072;
 pub const SQUASHFS_FILE_MAX_SIZE: usize = 1048576;
 pub const SQUASHFS_FILE_MAX_LOG: u32 = 20;
 
-// System limits
 pub const SQUASHFS_IDS: u32 = 65536;
 pub const SQUASHFS_NAME_LEN: usize = 256;
 pub const SQUASHFS_DIR_COUNT: u32 = 256;
 pub const SQUASHFS_SYMLINK_MAX: u32 = 65535;
 
-// Special values
 pub const SQUASHFS_INVALID: i64 = 0xffffffffffff;
 pub const SQUASHFS_INVALID_FRAG: u32 = 0xffffffff;
 pub const SQUASHFS_INVALID_XATTR: u32 = 0xffffffff;
 pub const SQUASHFS_INVALID_BLK: i64 = -1;
 pub const SQUASHFS_USED_BLK: i64 = -2;
 
+// Metadata and block size constants
 // Filesystem flags
 #[derive(Debug, Clone, Copy)]
 pub struct SquashFsFlags(u16);
@@ -390,8 +387,14 @@ mod tests {
 
     #[test]
     fn test_file_type_conversion() {
-        assert_eq!(SquashFsFileType::try_from(1).unwrap(), SquashFsFileType::Dir);
-        assert_eq!(SquashFsFileType::try_from(2).unwrap(), SquashFsFileType::File);
+        assert_eq!(
+            SquashFsFileType::try_from(1).unwrap(),
+            SquashFsFileType::Dir
+        );
+        assert_eq!(
+            SquashFsFileType::try_from(2).unwrap(),
+            SquashFsFileType::File
+        );
         assert!(SquashFsFileType::try_from(15).is_err());
     }
 
@@ -428,23 +431,13 @@ impl SquashFsSuperBlock {
 
 impl SquashFsDirEntry {
     pub fn name(&self) -> &[u8] {
-        unsafe {
-            std::slice::from_raw_parts(
-                self.name.as_ptr(),
-                self.size as usize,
-            )
-        }
+        unsafe { std::slice::from_raw_parts(self.name.as_ptr(), self.size as usize) }
     }
 }
 
 impl SquashFsXattrEntry {
     pub fn value(&self) -> &[u8] {
-        unsafe {
-            std::slice::from_raw_parts(
-                self.value.as_ptr(),
-                self.size as usize,
-            )
-        }
+        unsafe { std::slice::from_raw_parts(self.value.as_ptr(), self.size as usize) }
     }
 }
 
@@ -460,4 +453,4 @@ pub fn squashfs_inode_offset(inode: SquashFsInode) -> u16 {
 
 pub fn squashfs_inode_block(inode: SquashFsInode) -> u32 {
     (inode >> 16) as u32
-} 
+}

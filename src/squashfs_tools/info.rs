@@ -1,9 +1,34 @@
+use super::progress::{ProgressBar, ProgressBarTrait};
+use super::thread::ThreadManager;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use super::progress::ProgressBar;
-use super::signals::{SignalHandler, SignalType};
-use super::thread::ThreadManager;
+
+/// Signal type enum for handling different signals
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum SignalType {
+    Quit,
+    Hup,
+    None,
+}
+
+/// Signal handler for managing OS signals
+struct SignalHandler;
+
+impl SignalHandler {
+    /// Create a new signal handler
+    fn new() -> Self {
+        SignalHandler
+    }
+
+    /// Wait for a signal and return its type
+    fn wait_for_signal(&self) -> SignalType {
+        // Simple implementation that returns None after a timeout
+        // In a real implementation, this would use platform-specific signal handling
+        thread::sleep(Duration::from_millis(100));
+        SignalType::None
+    }
+}
 
 /// Directory entry structure
 #[derive(Debug)]
@@ -16,15 +41,16 @@ pub struct DirEntry {
 pub struct InfoManager {
     current_entry: Arc<Mutex<Option<DirEntry>>>,
     thread_manager: ThreadManager,
-    progress_bar: Arc<Mutex<Option<Box<dyn ProgressBar>>>>,
+    progress_bar: Arc<Mutex<Option<Box<dyn ProgressBarTrait>>>>,
 }
 
 impl InfoManager {
     /// Create a new info manager
     pub fn new() -> Self {
+        let shutdown_signal = Arc::new(Mutex::new(false));
         InfoManager {
             current_entry: Arc::new(Mutex::new(None)),
-            thread_manager: ThreadManager::new(),
+            thread_manager: ThreadManager::new(shutdown_signal),
             progress_bar: Arc::new(Mutex::new(None)),
         }
     }
@@ -58,7 +84,7 @@ impl InfoManager {
         // TODO: Implement queue and cache dumping
         println!("Queues, caches and threads status dump");
         println!("======================================");
-        
+
         // Disable progress bar during dump
         if let Some(progress_bar) = self.progress_bar.lock().unwrap().as_mut() {
             progress_bar.disable();
@@ -66,7 +92,7 @@ impl InfoManager {
 
         // Dump various queues and caches
         // This will be implemented when the queue and cache modules are available
-        
+
         // Re-enable progress bar after dump
         if let Some(progress_bar) = self.progress_bar.lock().unwrap().as_mut() {
             progress_bar.enable();
@@ -77,7 +103,7 @@ impl InfoManager {
     pub fn init(&self) {
         let current_entry = self.current_entry.clone();
         let progress_bar = self.progress_bar.clone();
-        
+
         let info_thread = thread::spawn(move || {
             let mut waiting = false;
             let signal_handler = SignalHandler::new();
@@ -91,7 +117,10 @@ impl InfoManager {
                             if let Some(progress_bar) = progress_bar.lock().unwrap().as_mut() {
                                 if let Some(dir_entry) = entry.as_ref() {
                                     if !dir_entry.subpath.is_empty() {
-                                        progress_bar.info(&format!("{}/{}", dir_entry.subpath, dir_entry.name));
+                                        progress_bar.info(&format!(
+                                            "{}/{}",
+                                            dir_entry.subpath, dir_entry.name
+                                        ));
                                     } else {
                                         progress_bar.info(&format!("/{}", dir_entry.name));
                                     }
@@ -126,8 +155,9 @@ impl InfoManager {
 
 #[cfg(test)]
 mod tests {
+    use crate::progress::DefaultProgressBar;
+
     use super::*;
-    use crate::progressbar::DefaultProgressBar;
 
     #[test]
     fn test_info_manager() {
@@ -148,4 +178,4 @@ mod tests {
         // Initialize the manager
         manager.init();
     }
-} 
+}

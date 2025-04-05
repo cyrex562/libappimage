@@ -2,19 +2,22 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use std::collections::HashMap;
 use std::os::unix::fs::PermissionsExt;
-use crate::error::DesktopIntegrationError;
+use crate::icon_handle::IconHandle;
+use crate::path_utils::hash_path;
+use crate::resources_extractor::ResourcesExtractor;
+use crate::string_sanitizer::StringSanitizer;
 use crate::AppImage;
 use crate::desktop_integration::editor::DesktopEntryEditor;
 use crate::desktop_integration::desktop_entry::DesktopEntry;
-use crate::utils::StringSanitizer;
 use crate::desktop_integration::constants::VENDOR_PREFIX;
+use crate::error::{DesktopIntegrationError, DesktopEntryEditError};
 
 /// Integrator instances allow the integration and disintegration of AppImage with XDG compliant desktop environments.
 pub struct Integrator {
     app_image: AppImage,
     xdg_data_home: PathBuf,
     app_image_id: String,
-    resources_extractor: crate::utils::ResourcesExtractor,
+    resources_extractor: ResourcesExtractor,
     desktop_entry: DesktopEntry,
 }
 
@@ -27,8 +30,8 @@ impl Integrator {
             return Err(DesktopIntegrationError::InvalidParameter("Invalid XDG_DATA_HOME".into()));
         }
 
-        let resources_extractor = crate::utils::ResourcesExtractor::new(app_image.clone());
-        let app_image_id = crate::utils::hash_path(app_image.get_path())
+        let resources_extractor = ResourcesExtractor::new(app_image.clone());
+        let app_image_id = hash_path(app_image.get_path())
             .map_err(|e| DesktopIntegrationError::InvalidParameter(e.to_string()))?;
 
         // Extract desktop entry
@@ -168,7 +171,7 @@ impl Integrator {
     }
 
     fn deploy_application_icon(&self, icon_name: &str, icon_data: &[u8]) -> Result<(), DesktopIntegrationError> {
-        let icon = crate::utils::IconHandle::from_data(icon_data)?;
+        let icon = IconHandle::from_data(icon_data)?;
         let mut icon_path = PathBuf::from("icons/hicolor");
 
         let sanitized_name = StringSanitizer::new(icon_name).sanitize_for_path();

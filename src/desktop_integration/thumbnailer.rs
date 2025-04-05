@@ -1,12 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::fs;
-use std::collections::HashMap;
+use crate::error::DesktopIntegrationError;
+use crate::icon_handle::IconHandle;
+use crate::path_utils::hash_path;
+use crate::resources_extractor::ResourcesExtractor;
 use crate::AppImage;
-use crate::desktop_integration::error::DesktopIntegrationError;
 use crate::desktop_integration::desktop_entry::DesktopEntry;
-use crate::utils::StringSanitizer;
-use crate::utils::IconHandle;
-use crate::utils::{ResourcesExtractor, hash_path};
 
 /// Thumbnails generator for AppImage files
 /// 

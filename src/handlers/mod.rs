@@ -1,13 +1,11 @@
-mod type1;
-mod type2;
+pub mod type1;
+pub mod type2;
 
-pub use type1::Type1Handler;
-pub use type2::Type2Handler;
-
-use std::any::Any;
 use std::path::Path;
 use crate::error::AppImageResult;
 use crate::format::AppImageFormat;
+use crate::handlers::type1::Type1Handler;
+use crate::handlers::type2::Type2Handler;
 
 /// Trait for AppImage handlers
 pub trait Handler {

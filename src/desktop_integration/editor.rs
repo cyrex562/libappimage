@@ -1,8 +1,7 @@
 use std::path::Path;
-use std::fmt;
 use crate::error::AppImageResult;
-use crate::utils::StringSanitizer;
 use crate::desktop_integration::desktop_entry::{DesktopEntry, DesktopEntryExecValue, DesktopEntryStringsValue};
+use crate::string_sanitizer::StringSanitizer;
 
 /// Editor for modifying desktop entries from AppImages
 pub struct DesktopEntryEditor {

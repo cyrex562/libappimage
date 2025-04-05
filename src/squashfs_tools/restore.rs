@@ -1,13 +1,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
-use signal_hook::{const_sig_handler, SigId};
 use signal_hook::iterator::Signals;
-use crate::error::{SquashError, Result};
-use crate::reader::ReaderManager;
+use crate::error::SquashError;
 use crate::progress::ProgressBar;
-use crate::info::Info;
+
 
 const SIGINT: i32 = 2;
 const SIGTERM: i32 = 15;

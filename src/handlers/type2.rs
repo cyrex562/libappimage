@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::io::{Write};
+use std::io::Write;
 use std::fs::{self, File, OpenOptions};
 use std::os::unix::fs::OpenOptionsExt;
 use crate::error::{AppImageError, AppImageResult};
@@ -13,7 +13,7 @@ pub struct Type2Handler {
     path: String,
     handler_type: i32,
     super_block: Option<SquashFsSuperBlock>,
-    compressor: Option<Compressor>,
+    compressor: Option<Box<dyn Compressor>>,
 }
 
 impl Type2Handler {
@@ -27,7 +27,7 @@ impl Type2Handler {
         })
     }
 
-    fn get_super_block(&mut self) -> AppImageResult<(&mut SquashFsSuperBlock, &mut Compressor)> {
+    fn get_super_block(&mut self) -> AppImageResult<(&mut SquashFsSuperBlock, &mut dyn Compressor)> {
         if self.super_block.is_none() {
             let mut file = File::open(&self.path)?;
             let (super_block, compressor) = read_super(&mut file, Path::new(&self.path))

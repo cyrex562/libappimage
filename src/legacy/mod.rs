@@ -1,10 +1,9 @@
 use std::path::Path;
 use std::os::raw::{c_char, c_int};
 use crate::{
-    AppImage, AppImageError, AppImageResult,
-    utils::{elf_file::ElfFile, digest::type2_digest_md5},
-    desktop_integration::IntegrationManager,
-    ffi::{catch_all, appimage_get_type, appimage_is_terminal_app},
+    AppImage, AppImageResult,
+    utils::elf_file::ElfFile,
+    ffi::{catch_all, appimage_is_terminal_app},
 };
 
 /// Calculate the size of an ELF file on disk based on the information in its header
@@ -29,9 +28,10 @@ pub fn type2_is_terminal_app(path: impl AsRef<Path>) -> AppImageResult<bool> {
 
 #[cfg(feature = "desktop-integration")]
 mod desktop_integration {
-    use super::*;
-    use crate::desktop_integration::IntegrationManager;
+    use crate::desktop_integration::manager::IntegrationManager;
 
+    use super::*;
+ 
     /// Check if a Type 1 AppImage should not be integrated
     #[deprecated(note = "Use AppImage::shall_not_be_integrated instead")]
     pub fn type1_shall_not_be_integrated(path: impl AsRef<Path>) -> AppImageResult<bool> {
@@ -72,7 +72,6 @@ mod desktop_integration {
 /// FFI module for legacy C bindings
 pub mod ffi {
     use super::*;
-    use crate::desktop_integration::IntegrationManager;
 
     /// Get the ELF size of an AppImage
     #[no_mangle]
@@ -102,6 +101,8 @@ pub mod ffi {
 
     #[cfg(feature = "desktop-integration")]
     pub mod desktop_integration {
+        use crate::desktop_integration::manager::IntegrationManager;
+
         use super::*;
 
         /// Register a Type 1 AppImage in the system
@@ -198,6 +199,8 @@ mod tests {
     #[cfg(feature = "desktop-integration")]
     #[test]
     fn test_shall_not_be_integrated() {
+        use crate::legacy::desktop_integration::type1_shall_not_be_integrated;
+
         let dir = tempdir().unwrap();
         let appimage_path = dir.path().join("test.AppImage");
         
@@ -213,6 +216,8 @@ mod tests {
     #[cfg(feature = "desktop-integration")]
     #[test]
     fn test_register_in_system() {
+        use crate::legacy::desktop_integration::type1_register_in_system;
+
         let dir = tempdir().unwrap();
         let appimage_path = dir.path().join("test.AppImage");
         

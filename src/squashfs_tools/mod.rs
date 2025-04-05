@@ -1,6 +1,5 @@
 // Core functionality
 mod alloc;
-pub mod error;
 pub mod fs;
 pub mod memory;
 pub mod read;
@@ -55,55 +54,6 @@ pub mod unsquashfs_error;
 pub mod unsquashfs_help;
 pub mod unsquashfs_info;
 pub mod unsquashfs_xattr;
-
-// Re-export commonly used types and functions
-pub use alloc::*;
-pub use compressor::{Compressor, CompressorError};
-
-// Compression implementations
-pub use gzip::GzipCompressor;
-pub use lz4::Lz4Compressor;
-pub use lzma::LzmaCompressor;
-pub use lzma_xz::LzmaXzCompressor;
-pub use lzo::LzoCompressor;
-pub use xz::XzCompressor;
-pub use zstd::ZstdCompressor;
-
-// File system operations
-pub use fragments::*;
-pub use pseudo::*;
-pub use xattr::*;
-pub use xattr_system::*;
-
-// Tools and utilities
-pub use action::*;
-pub use action_eval::*;
-pub use action_impl::*;
-pub use compat::*;
-pub use endian::*;
-pub use fnmatch::*;
-pub use help::*;
-pub use info::*;
-pub use limit::*;
-pub use merge_sort::*;
-pub use mksquashfs::*;
-pub use pager::*;
-pub use processors::*;
-pub use progress::*;
-pub use read_queue::*;
-pub use restore::*;
-pub use seq_queue::*;
-pub use signals::*;
-pub use sort::*;
-pub use symbolic_mode::*;
-pub use tar::*;
-pub use thread::*;
-pub use time_compat::*;
-pub use unsquashfs::*;
-pub use unsquashfs_error::*;
-pub use unsquashfs_help::*;
-pub use unsquashfs_info::*;
-pub use unsquashfs_xattr::*;
 
 // Constants and types
 pub const SQUASHFS_MAGIC: u32 = 0x73717368;

@@ -78,7 +78,9 @@ pub fn hash_path<P: AsRef<Path>>(path: P) -> Result<String> {
 
     let uri = path_to_uri(&canonical_path);
     let md5_raw = hashlib::md5(&uri);
-    let md5_str = hashlib::to_hex(&md5_raw);
+    let md5_str = md5_raw.iter()
+        .map(|b| format!("{:02x}", b))
+        .collect::<String>();
 
     Ok(md5_str)
 }

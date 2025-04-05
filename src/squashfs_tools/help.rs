@@ -1,9 +1,8 @@
 use std::io::{self, Write};
-use std::process;
 use std::env;
 use regex::Regex;
 use atty;
-use super::error::{ErrorState, SquashError};
+use crate::error::{ErrorState, SquashError};
 
 /// Constants for help text formatting
 const MKSQUASHFS_SYNTAX: &str = "SYNTAX: {} source1 source2 ...  FILESYSTEM [OPTIONS] [-e list of exclude dirs/files]\n\n";
@@ -138,9 +137,8 @@ impl HelpManager {
     }
 
     /// Print section names
-    fn print_section_names(&mut self, prefix: &str, sections: &[&str], 
+    fn print_section_names(&mut self, output: &mut impl Write, prefix: &str, sections: &[&str], 
                           options_text: &[&str]) -> Result<(), SquashError> {
-        let mut output = io::stdout();
         writeln!(output, "{}SECTION NAME\t\tSECTION", prefix)?;
 
         let mut section_idx = 0;

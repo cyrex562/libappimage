@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 use std::fmt;
-use super::error::{SquashError, SquashResult as Result};
+use crate::error::{SquashError, SquashResult as Result};
 
 /// Compression types supported by SquashFS
 #[derive(Debug, Clone, Copy, PartialEq)]

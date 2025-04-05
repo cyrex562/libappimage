@@ -1,10 +1,10 @@
-use std::io::{self, Write};
-use std::ffi::{NulError, FromBytesWithNulError};
-use std::str::Utf8Error;
-use std::fmt;
-use thiserror::Error;
 use crate::format::FormatError;
-use crate::utils::IconHandleError;
+use crate::icon_handle::IconHandleError;
+use std::ffi::{FromBytesWithNulError, NulError};
+use std::fmt;
+use std::io::{self, Write};
+use std::str::Utf8Error;
+use thiserror::Error;
 
 /// Error types for SquashFS operations
 #[derive(Error, Debug)]
@@ -19,10 +19,7 @@ pub enum SquashError {
     UnsupportedBigEndian,
 
     #[error("Unsupported version {major}.{minor}")]
-    UnsupportedVersion {
-        major: u16,
-        minor: u16,
-    },
+    UnsupportedVersion { major: u16, minor: u16 },
 
     #[error("Invalid block size")]
     InvalidBlockSize,
@@ -56,118 +53,6 @@ pub enum SquashError {
 }
 
 pub type SquashResult<T> = Result<T, SquashError>;
-
-/// Progress bar interface for displaying progress and errors
-pub trait ProgressBar {
-    fn error(&mut self, fmt: fmt::Arguments<'_>) -> io::Result<()>;
-    fn info(&mut self, fmt: fmt::Arguments<'_>) -> io::Result<()>;
-    fn disable(&mut self);
-    fn enable(&mut self);
-}
-
-/// Default implementation using stdout/stderr
-pub struct DefaultProgressBar {
-    stdout: io::Stdout,
-    stderr: io::Stderr,
-    enabled: bool,
-}
-
-impl DefaultProgressBar {
-    pub fn new() -> Self {
-        DefaultProgressBar {
-            stdout: io::stdout(),
-            stderr: io::stderr(),
-            enabled: true,
-        }
-    }
-}
-
-impl ProgressBar for DefaultProgressBar {
-    fn error(&mut self, fmt: fmt::Arguments<'_>) -> io::Result<()> {
-        if self.enabled {
-            writeln!(self.stderr, "{}", fmt)
-        } else {
-            Ok(())
-        }
-    }
-
-    fn info(&mut self, fmt: fmt::Arguments<'_>) -> io::Result<()> {
-        if self.enabled {
-            writeln!(self.stdout, "{}", fmt)
-        } else {
-            Ok(())
-        }
-    }
-
-    fn disable(&mut self) {
-        self.enabled = false;
-    }
-
-    fn enable(&mut self) {
-        self.enabled = true;
-    }
-}
-
-/// Global progress bar instance
-static mut PROGRESS_BAR: Option<Box<dyn ProgressBar>> = None;
-
-/// Initialize the progress bar
-pub fn init_progress_bar(bar: Box<dyn ProgressBar>) {
-    unsafe {
-        PROGRESS_BAR = Some(bar);
-    }
-}
-
-/// Get the current progress bar instance
-fn get_progress_bar() -> &'static mut Box<dyn ProgressBar> {
-    unsafe {
-        PROGRESS_BAR.as_mut().expect("Progress bar not initialized")
-    }
-}
-
-/// Print an error message
-#[macro_export]
-macro_rules! error {
-    ($($arg:tt)*) => {
-        if let Err(e) = get_progress_bar().error(format_args!($($arg)*)) {
-            eprintln!("Failed to write error message: {}", e);
-        }
-    };
-}
-
-/// Print an info message
-#[macro_export]
-macro_rules! info {
-    ($($arg:tt)*) => {
-        if let Err(e) = get_progress_bar().info(format_args!($($arg)*)) {
-            eprintln!("Failed to write info message: {}", e);
-        }
-    };
-}
-
-/// Print a trace message (only if SQUASHFS_TRACE is enabled)
-#[cfg(feature = "trace")]
-#[macro_export]
-macro_rules! trace {
-    ($($arg:tt)*) => {
-        info!("squashfs: {}", format_args!($($arg)*));
-    };
-}
-
-#[cfg(not(feature = "trace"))]
-#[macro_export]
-macro_rules! trace {
-    ($($arg:tt)*) => {};
-}
-
-/// Handle memory errors
-#[macro_export]
-macro_rules! mem_error {
-    ($func:expr) => {
-        error!("FATAL ERROR: Out of memory ({})", $func);
-        exit_squashfs();
-    };
-}
 
 /// Exit the program with an error
 pub fn exit_squashfs() {
@@ -419,38 +304,6 @@ impl From<AppImageError> for DesktopIntegrationError {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_error_conversion() {
-        // Test IO error conversion
-        let io_err = io::Error::new(io::ErrorKind::NotFound, "File not found");
-        let app_err: AppImageError = io_err.into();
-        assert!(matches!(app_err, AppImageError::Io(_)));
-
-        // Test string error conversion
-        let str_err = "Test error".to_string();
-        let app_err = AppImageError::OperationFailed(str_err);
-        assert!(matches!(app_err, AppImageError::OperationFailed(_)));
-
-        // Test helper trait
-        let result: Result<(), String> = Err("Test error".to_string());
-        let app_result = result.into_appimage_string_error();
-        assert!(matches!(app_result, Err(AppImageError::OperationFailed(_))));
-    }
-
-    #[test]
-    fn test_error_display() {
-        let err = AppImageError::InvalidFormat("Test format error".to_string());
-        assert_eq!(err.to_string(), "Invalid format: Test format error");
-
-        let err = AppImageError::NotFound("Test file".to_string());
-        assert_eq!(err.to_string(), "Resource not found: Test file");
-    }
-}
-
 /// Error type for desktop integration operations
 #[derive(Debug, thiserror::Error)]
 pub enum DesktopIntegrationError {
@@ -493,4 +346,89 @@ impl From<DesktopIntegrationError> for AppImageError {
     fn from(error: DesktopIntegrationError) -> Self {
         AppImageError::DesktopIntegration(error.to_string())
     }
-} 
+}
+
+/// Error type for desktop entry editing operations
+#[derive(Debug, thiserror::Error)]
+pub enum DesktopEntryEditError {
+    /// File operation error
+    #[error("File error: {0}")]
+    File(#[from] std::io::Error),
+
+    /// Format error in desktop entry
+    #[error("Format error: {0}")]
+    Format(String),
+
+    /// Missing required field
+    #[error("Missing field: {0}")]
+    MissingField(String),
+
+    /// Invalid field value
+    #[error("Invalid value: {0}")]
+    InvalidValue(String),
+
+    /// Operation failed
+    #[error("Operation failed: {0}")]
+    OperationFailed(String),
+}
+
+impl From<DesktopEntryEditError> for DesktopIntegrationError {
+    fn from(error: DesktopEntryEditError) -> Self {
+        DesktopIntegrationError::DesktopIntegration(error.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_conversion() {
+        // Test IO error conversion
+        let io_err = io::Error::new(io::ErrorKind::NotFound, "File not found");
+        let app_err: AppImageError = io_err.into();
+        assert!(matches!(app_err, AppImageError::Io(_)));
+
+        // Test string error conversion
+        let str_err = "Test error".to_string();
+        let app_err = AppImageError::OperationFailed(str_err);
+        assert!(matches!(app_err, AppImageError::OperationFailed(_)));
+
+        // Test helper trait
+        let result: Result<(), String> = Err("Test error".to_string());
+        let app_result = result.into_appimage_string_error();
+        assert!(matches!(app_result, Err(AppImageError::OperationFailed(_))));
+    }
+
+    #[test]
+    fn test_error_display() {
+        let err = AppImageError::InvalidFormat("Test format error".to_string());
+        assert_eq!(err.to_string(), "Invalid format: Test format error");
+
+        let err = AppImageError::NotFound("Test file".to_string());
+        assert_eq!(err.to_string(), "Resource not found: Test file");
+    }
+
+    #[test]
+    fn test_desktop_entry_edit_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
+        let edit_err = DesktopEntryEditError::File(io_err);
+        assert!(matches!(edit_err, DesktopEntryEditError::File(_)));
+
+        let format_err = DesktopEntryEditError::Format("Invalid format".to_string());
+        assert!(matches!(format_err, DesktopEntryEditError::Format(_)));
+
+        let missing_err = DesktopEntryEditError::MissingField("Name".to_string());
+        assert!(matches!(
+            missing_err,
+            DesktopEntryEditError::MissingField(_)
+        ));
+
+        // Test error conversion
+        let integration_err: DesktopIntegrationError = format_err.into();
+        assert!(matches!(
+            integration_err,
+            DesktopIntegrationError::DesktopIntegration(_)
+        ));
+    }
+}

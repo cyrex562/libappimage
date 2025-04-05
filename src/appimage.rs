@@ -1,10 +1,11 @@
-use std::path::{Path, PathBuf};
-use std::io::Write;
-use crate::traversal::{Traversal, TraversalType1, TraversalType2};
 use crate::elf::ElfFile;
-use crate::format::{AppImageFormat, FormatError};
 use crate::error::{AppImageError, AppImageResult};
-use crate::handlers::{Handler, Type1Handler, Type2Handler};
+use crate::format::AppImageFormat;
+use crate::handlers::type1::Type1Handler;
+use crate::handlers::type2::Type2Handler;
+use crate::handlers::Handler;
+use crate::traversal::{Traversal, TraversalType1, TraversalType2};
+use std::path::{Path, PathBuf};
 
 /// Represents an existing AppImage file. Provides readonly methods to
 /// access the AppImage information and contained files.
@@ -19,7 +20,7 @@ impl AppImage {
     pub fn new<P: AsRef<Path>>(path: P) -> AppImageResult<Self> {
         let path = path.as_ref().to_path_buf();
         let format = AppImageFormat::from_file(&path)?;
-        
+
         if !format.is_valid() {
             return Err(AppImageError::InvalidFormat(format!(
                 "Unknown AppImage format: {}",
@@ -42,9 +43,8 @@ impl AppImage {
 
     /// Calculate the offset in the AppImage file where the payload filesystem is located
     pub fn get_payload_offset(&self) -> AppImageResult<i64> {
-        let elf = ElfFile::new(&self.path)
-            .map_err(|e| AppImageError::Elf(e.to_string()))?;
-        
+        let elf = ElfFile::new(&self.path).map_err(|e| AppImageError::Elf(e.to_string()))?;
+
         Ok(elf.get_size() as i64)
     }
 
@@ -53,7 +53,9 @@ impl AppImage {
         match self.format {
             AppImageFormat::Type1 => Ok(Box::new(TraversalType1::new(&self.path)?)),
             AppImageFormat::Type2 => Ok(Box::new(TraversalType2::new(&self.path)?)),
-            AppImageFormat::Invalid => Err(AppImageError::InvalidFormat("Invalid AppImage format".to_string())),
+            AppImageFormat::Invalid => Err(AppImageError::InvalidFormat(
+                "Invalid AppImage format".to_string(),
+            )),
         }
     }
 
@@ -81,7 +83,9 @@ impl AppImage {
         match self.format {
             AppImageFormat::Type1 => Ok(Box::new(Type1Handler::new(&self.path)?)),
             AppImageFormat::Type2 => Ok(Box::new(Type2Handler::new(&self.path)?)),
-            AppImageFormat::Invalid => Err(AppImageError::InvalidFormat("Invalid AppImage format".to_string())),
+            AppImageFormat::Invalid => Err(AppImageError::InvalidFormat(
+                "Invalid AppImage format".to_string(),
+            )),
         }
     }
 }
@@ -102,16 +106,16 @@ mod tests {
     fn test_appimage_creation() -> AppImageResult<()> {
         let temp_dir = tempdir()?;
         let appimage_path = temp_dir.path().join("test.AppImage");
-        
+
         // Create a test AppImage
         let mut file = fs::File::create(&appimage_path)?;
         file.write_all(b"Hello, World!")?;
-        
+
         // Create AppImage instance
         let appimage = AppImage::new(&appimage_path)?;
         assert_eq!(appimage.get_path(), appimage_path);
         assert_eq!(appimage.get_format(), AppImageFormat::Type1);
-        
+
         Ok(())
     }
 
@@ -119,26 +123,26 @@ mod tests {
     fn test_file_operations() -> AppImageResult<()> {
         let temp_dir = tempdir()?;
         let appimage_path = temp_dir.path().join("test.AppImage");
-        
+
         // Create a test AppImage
         let mut file = fs::File::create(&appimage_path)?;
         file.write_all(b"Hello, World!")?;
-        
+
         // Test file operations
         let appimage = AppImage::new(&appimage_path)?;
-        
+
         // Test file reading
         let content = appimage.read_file("test.txt")?;
         assert_eq!(content, b"Hello, World!");
-        
+
         // Test file extraction
         let extracted_file = temp_dir.path().join("extracted.txt");
         appimage.extract_file("test.txt", &extracted_file)?;
         assert_eq!(fs::read_to_string(extracted_file)?, "Hello, World!");
-        
+
         // Test file metadata
         assert!(appimage.size()? > 0);
-        
+
         Ok(())
     }
-} 
+}

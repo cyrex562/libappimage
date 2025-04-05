@@ -1,11 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::fs;
-use std::collections::HashMap;
+use crate::path_utils::hash_path;
+use crate::resources_extractor::ResourcesExtractor;
 use crate::AppImage;
-use crate::desktop_integration::error::DesktopIntegrationError;
+use crate::error::DesktopIntegrationError;
 use crate::desktop_integration::integrator::Integrator;
 use crate::desktop_integration::constants::VENDOR_PREFIX;
-use crate::utils::{ResourcesExtractor, hash_path};
 use crate::desktop_integration::desktop_entry::DesktopEntry;
 
 /// Manages the integration and disintegration of AppImages in the system
@@ -37,7 +37,7 @@ impl IntegrationManager {
         Ok(Self {
             xdg_data_home,
             #[cfg(feature = "thumbnailer")]
-            thumbnailer: crate::desktop_integration::thumbnailer::Thumbnailer::new(&xdg_data_home)?,
+            thumbnailer: crate::desktop_integration::thumbnailer::Thumbnailer::new()?,
         })
     }
 

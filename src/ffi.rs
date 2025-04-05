@@ -1,16 +1,13 @@
-use std::ffi::{CString, c_void};
+use std::ffi::{c_void, CString};
 use std::os::raw::{c_char, c_int, c_ulong};
 use std::path::Path;
 use std::ptr;
 
+use crate::desktop_integration::manager::IntegrationManager;
 use crate::{
-    AppImage, AppImageFormat, AppImageError,
-    utils::{hashlib, path_utils},
-    desktop_integration::IntegrationManager,
     error::{AppImageResult, IntoAppImageStringError},
-    utils::logger::{Logger, LogLevel},
-    handlers::{Handler, create_handler},
-    desktop_integration::{DesktopIntegrationError},
+    utils::logger::{LogLevel, Logger},
+    AppImage, AppImageError, AppImageFormat,
 };
 
 /// FFI error codes
@@ -57,9 +54,9 @@ impl From<AppImageError> for ErrorCode {
             AppImageError::NotFound(_) => ErrorCode::FileNotFound,
             AppImageError::PermissionDenied(_) => ErrorCode::IoError,
             AppImageError::OperationFailed(_) => ErrorCode::IoError,
-            AppImageError::StringConversion(_) |
-            AppImageError::NulError(_) |
-            AppImageError::FromBytesWithNul(_) => ErrorCode::StringConversionError,
+            AppImageError::StringConversion(_)
+            | AppImageError::NulError(_)
+            | AppImageError::FromBytesWithNul(_) => ErrorCode::StringConversionError,
             AppImageError::DesktopIntegration(_) => ErrorCode::DesktopIntegrationError,
             AppImageError::NotOpen => ErrorCode::NotOpen,
             AppImageError::FileNotFound(_) => ErrorCode::FileNotFound,
@@ -123,14 +120,14 @@ pub extern "C" fn appimage_list_files(path: *const c_char) -> *mut *mut c_char {
         let path = unsafe { std::ffi::CStr::from_ptr(path).to_str()? };
         let app_image = AppImage::new(path)?;
         let mut files = Vec::new();
-        
+
         for file in app_image.files()? {
             files.push(CString::new(file)?.into_raw());
         }
-        
+
         // Add null terminator
         files.push(std::ptr::null_mut());
-        
+
         // Convert to raw pointer and forget the Vec to prevent deallocation
         let ptr = files.as_mut_ptr();
         std::mem::forget(files);
@@ -164,23 +161,24 @@ pub extern "C" fn appimage_read_file_into_buffer_following_symlinks(
     buffer: *mut *mut c_char,
     buf_size: *mut c_ulong,
 ) -> bool {
-    if appimage_file_path.is_null() || file_path.is_null() || buffer.is_null() || buf_size.is_null() {
+    if appimage_file_path.is_null() || file_path.is_null() || buffer.is_null() || buf_size.is_null()
+    {
         return false;
     }
 
     catch_all(|| {
         let app_path = unsafe { std::ffi::CStr::from_ptr(appimage_file_path).to_str()? };
         let file_path = unsafe { std::ffi::CStr::from_ptr(file_path).to_str()? };
-        
+
         let app_image = AppImage::new(app_path)?;
         let contents = app_image.read_file(file_path)?;
-        
+
         unsafe {
             *buffer = libc::malloc(contents.len()) as *mut c_char;
             std::ptr::copy_nonoverlapping(contents.as_ptr(), *buffer as *mut u8, contents.len());
             *buf_size = contents.len() as c_ulong;
         }
-        
+
         Ok(true)
     })
 }
@@ -200,17 +198,21 @@ pub extern "C" fn appimage_extract_file_following_symlinks(
         let app_path = unsafe { std::ffi::CStr::from_ptr(appimage_file_path).to_str()? };
         let file_path = unsafe { std::ffi::CStr::from_ptr(file_path).to_str()? };
         let target_path = unsafe { std::ffi::CStr::from_ptr(target_file_path).to_str()? };
-        
+
         let app_image = AppImage::new(app_path)?;
         app_image.extract_file(file_path, target_path)?;
-        
+
         Ok(())
     });
 }
 
 /// Get the MD5 hash of an AppImage
 #[no_mangle]
-pub extern "C" fn appimage_get_md5(appimage: *const c_void, hash: *mut c_char, hash_len: c_int) -> c_int {
+pub extern "C" fn appimage_get_md5(
+    appimage: *const c_void,
+    hash: *mut c_char,
+    hash_len: c_int,
+) -> c_int {
     if appimage.is_null() || hash.is_null() || hash_len <= 0 {
         return ErrorCode::IoError.into();
     }
@@ -219,7 +221,9 @@ pub extern "C" fn appimage_get_md5(appimage: *const c_void, hash: *mut c_char, h
     let hash_str = match appimage.get_md5() {
         Ok(h) => h,
         Err(e) => {
-            unsafe { LAST_ERROR = Some(e.to_string()); }
+            unsafe {
+                LAST_ERROR = Some(e.to_string());
+            }
             return ErrorCode::IoError.into();
         }
     };
@@ -227,7 +231,9 @@ pub extern "C" fn appimage_get_md5(appimage: *const c_void, hash: *mut c_char, h
     let c_hash = match CString::new(hash_str) {
         Ok(h) => h,
         Err(e) => {
-            unsafe { LAST_ERROR = Some(e.to_string()); }
+            unsafe {
+                LAST_ERROR = Some(e.to_string());
+            }
             return ErrorCode::StringConversionError.into();
         }
     };
@@ -253,7 +259,9 @@ pub extern "C" fn appimage_get_payload_offset(appimage: *const c_void) -> i64 {
     match appimage.get_payload_offset() {
         Ok(offset) => offset,
         Err(e) => {
-            unsafe { LAST_ERROR = Some(e.to_string()); }
+            unsafe {
+                LAST_ERROR = Some(e.to_string());
+            }
             -1
         }
     }
@@ -261,8 +269,9 @@ pub extern "C" fn appimage_get_payload_offset(appimage: *const c_void) -> i64 {
 
 #[cfg(feature = "desktop-integration")]
 mod desktop_integration_ffi {
+    use crate::desktop_integration::manager::IntegrationManager;
+
     use super::*;
-    use crate::desktop_integration::IntegrationManager;
 
     /// Register an AppImage in the system
     #[no_mangle]
@@ -275,14 +284,14 @@ mod desktop_integration_ffi {
             let path = unsafe { std::ffi::CStr::from_ptr(path).to_str()? };
             let app_image = AppImage::new(path)?;
             let manager = IntegrationManager::new();
-            
+
             manager.register_app_image(&app_image)?;
-            
+
             #[cfg(feature = "thumbnailer")]
             {
                 manager.generate_thumbnails(&app_image)?;
             }
-            
+
             Ok(0)
         })
     }
@@ -297,14 +306,14 @@ mod desktop_integration_ffi {
         catch_all(|| {
             let path = unsafe { std::ffi::CStr::from_ptr(path).to_str()? };
             let manager = IntegrationManager::new();
-            
+
             manager.unregister_app_image(path)?;
-            
+
             #[cfg(feature = "thumbnailer")]
             {
                 manager.remove_thumbnails(path)?;
             }
-            
+
             Ok(0)
         })
     }
@@ -326,7 +335,10 @@ mod desktop_integration_ffi {
     #[cfg(feature = "thumbnailer")]
     /// Create AppImage thumbnail
     #[no_mangle]
-    pub extern "C" fn appimage_create_thumbnail(appimage_file_path: *const c_char, verbose: bool) -> bool {
+    pub extern "C" fn appimage_create_thumbnail(
+        appimage_file_path: *const c_char,
+        verbose: bool,
+    ) -> bool {
         if appimage_file_path.is_null() {
             return false;
         }
@@ -335,7 +347,7 @@ mod desktop_integration_ffi {
             let path = unsafe { std::ffi::CStr::from_ptr(appimage_file_path).to_str()? };
             let app_image = AppImage::new(path)?;
             let manager = IntegrationManager::new();
-            
+
             manager.generate_thumbnails(&app_image)?;
             Ok(true)
         })
@@ -375,7 +387,9 @@ pub extern "C" fn appimage_set_log_level(level: c_int) -> c_int {
 
 /// Set the log callback
 #[no_mangle]
-pub extern "C" fn appimage_set_log_callback(callback: extern "C" fn(level: c_int, message: *const c_char)) -> c_int {
+pub extern "C" fn appimage_set_log_callback(
+    callback: extern "C" fn(level: c_int, message: *const c_char),
+) -> c_int {
     Logger::instance().set_callback(move |level, message| {
         let level_int = match level {
             LogLevel::Debug => 0,
@@ -445,9 +459,7 @@ fn set_last_error(error: AppImageError) {
 
 /// Get the last error message
 fn get_last_error() -> Option<String> {
-    unsafe {
-        LAST_ERROR.take()
-    }
+    unsafe { LAST_ERROR.take() }
 }
 
 /// Helper macro to handle FFI results
@@ -609,7 +621,7 @@ pub extern "C" fn appimage_get_files(appimage: *const c_void) -> *mut *mut c_cha
     for file in files {
         file_list.push(CString::new(file)?.into_raw());
     }
-    Ok(Box::into_raw(Box::new(file_list.into_boxed_slice())) as *mut *mut c_char)
+    Box::into_raw(Box::new(file_list.into_boxed_slice())) as *mut *mut c_char
 }
 
 /// Free the AppImage files
@@ -643,4 +655,4 @@ pub extern "C" fn appimage_is_terminal_app(path: *const c_char) -> c_int {
     })
 }
 
-// Add other FFI functions here using the same error handling pattern 
+// Add other FFI functions here using the same error handling pattern
